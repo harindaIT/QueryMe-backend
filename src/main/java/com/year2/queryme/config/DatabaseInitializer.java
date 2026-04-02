@@ -16,36 +16,43 @@ public class DatabaseInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        log.info("Starting database schema repair...");
+        System.out.println("--- STARTING ROBUST DATABASE REPAIR ---");
+        
+        repairTable("users");
+        repairTable("teachers");
+        repairTable("courses");
+        repairTable("students");
+        repairTable("admins");
+        repairTable("guests");
+        repairTable("class_groups");
+        
+        System.out.println("--- DATABASE REPAIR COMPLETED ---");
+    }
+
+    private void repairTable(String tableName) {
         try {
-            // Fix ID columns to be BIGINT instead of padded strings/binary
-            // We use MODIFY to change the type while keeping the AUTO_INCREMENT property
+            System.out.println(">>> 🛠️ Repairing table: " + tableName);
             
-            // 1. Users table
-            jdbcTemplate.execute("ALTER TABLE users MODIFY id BIGINT AUTO_INCREMENT");
-            log.info("Repaired users table schema.");
-
-            // 2. Teachers table
-            jdbcTemplate.execute("ALTER TABLE teachers MODIFY id BIGINT AUTO_INCREMENT");
-            log.info("Repaired teachers table schema.");
-
-            // 3. Courses table
-            jdbcTemplate.execute("ALTER TABLE courses MODIFY id BIGINT AUTO_INCREMENT");
-            log.info("Repaired courses table schema.");
-
-            // 4. Students table
-            jdbcTemplate.execute("ALTER TABLE students MODIFY id BIGINT AUTO_INCREMENT");
-            log.info("Repaired students table schema.");
-
-            // 5. Admins/Guests/ClassGroups (if they exist and have issues)
-            try { jdbcTemplate.execute("ALTER TABLE admins MODIFY id BIGINT AUTO_INCREMENT"); } catch (Exception e) {}
-            try { jdbcTemplate.execute("ALTER TABLE guests MODIFY id BIGINT AUTO_INCREMENT"); } catch (Exception e) {}
-            try { jdbcTemplate.execute("ALTER TABLE class_groups MODIFY id BIGINT AUTO_INCREMENT"); } catch (Exception e) {}
+            // 1. Deep Clean: Remove null bytes, spaces, and non-numeric junk
+            // This is the most common reason for 'Data truncated' errors in MySQL/MariaDB
+            jdbcTemplate.execute("UPDATE " + tableName + " SET id = TRIM(REPLACE(id, '\\0', '')) WHERE id IS NOT NULL");
             
-            log.info("Database schema repair completed successfully.");
+            // 2. Try to cast explicitly to numeric internal state
+            jdbcTemplate.execute("UPDATE " + tableName + " SET id = CAST(id AS UNSIGNED) WHERE id IS NOT NULL AND id != ''");
+            
+            // 3. Perform the actual schema alteration to BIGINT AUTO_INCREMENT
+            String sql = "ALTER TABLE " + tableName + " MODIFY id BIGINT AUTO_INCREMENT";
+            jdbcTemplate.execute(sql);
+            System.out.println("✅ " + tableName + " table is now HEALTHY and AUTO_INCREMENT is ON.");
         } catch (Exception e) {
-            log.error("Failed to repair database schema: {}", e.getMessage());
-            // We don't throw the exception to avoid crashing startup if tables are already fixed
+            String errorMsg = e.getMessage();
+            if (errorMsg.contains("already exists") || errorMsg.contains("Duplicate entry")) {
+                System.out.println("⚠️ " + tableName + ": Found duplicate IDs during cleaning. You may need to manually delete duplicate rows.");
+            } else if (errorMsg.contains("invalid use of group function")) {
+               // ignore
+            } else {
+                System.out.println("ℹ️ " + tableName + " status: " + errorMsg);
+            }
         }
     }
 }

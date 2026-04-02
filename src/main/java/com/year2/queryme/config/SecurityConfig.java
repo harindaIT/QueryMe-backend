@@ -48,10 +48,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/teachers/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/admins/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/guests/register").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/courses").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/class-groups").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/class-groups/**").permitAll()
+
+                        // ── Restricted write access ──────────────────────
+                        .requestMatchers(HttpMethod.POST, "/api/courses").hasRole("TEACHER")
+                        .requestMatchers(HttpMethod.POST, "/api/class-groups").hasRole("TEACHER")
 
                         // ── Public read ─────────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()

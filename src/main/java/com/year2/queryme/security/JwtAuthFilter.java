@@ -56,6 +56,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     authToken.setDetails(
                             new WebAuthenticationDetailsSource().buildDetails(request)
                     );
+                    
+                    System.out.println("--- JWT DIAGNOSTIC ---");
+                    System.out.println("Email found in token: [" + email + "]");
+                    System.out.println("Authorities assigned: " + userDetails.getAuthorities());
+                    System.out.println("----------------------");
+                    
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }

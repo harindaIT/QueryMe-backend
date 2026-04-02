@@ -49,13 +49,13 @@ The server will be available at: `http://localhost:8080`
 
 ### 👨‍🏫 TEACHER Flow
 *Goal: Manage curriculum and register students.*
-1.  **Signup / Login**: Sign in as `teacher@queryme.com` | `Teacher@123`.
+1.  **Signup / Login**: Sign in as `emilien@gmail.com` | `emilien123`.
 2.  **Course Creation**: `POST /api/courses` to create your classroom.
 3.  **Student Registration**: `POST /api/students/register` using your Teacher token.
 
 ### 👩‍🎓 STUDENT Flow
 *Goal: Profile management and course interaction.*
-1.  **Login**: Use credentials provided by your teacher (e.g., `alice@queryme.com` | `Student@123`).
+1.  **Login**: Use credentials provided by your teacher (e.g., `josianenikuze45@gmail.com` | `josiane123`).
 2.  **Profile**: `GET /api/students/profile` to view your data.
 3.  **Update**: `PUT /api/students/{id}` to refresh your info.
 
@@ -65,7 +65,6 @@ The server will be available at: `http://localhost:8080`
 2.  **Audit**: Use `GET /api/students` to see the full register of active learners.
 
 ---
-
 
 ## 📜 Full API Reference
 
