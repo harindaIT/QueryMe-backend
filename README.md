@@ -560,54 +560,82 @@ exam dataset, so queries cannot affect other students or the application databas
 | `SandboxService` | Primary interface — provision, retrieve connection info, teardown |
 | `SandboxRegistry` | JPA entity tracking active sandboxes in the `sandbox_registry` table |
 | `SandboxCleanupScheduler` | Runs every 5 minutes to remove expired sandboxes |
+## Overview
 
-## Configuration Requirements
+The Sandbox Environment Module provides schema-based PostgreSQL isolation for exam execution within the QueryMe monolith. It provisions a dedicated schema for each exam and student pairing, optionally applies seed data, and records sandbox metadata for lifecycle tracking.
 
-**`application.yml`** — already set:
+This module uses the shared database user `level6year2` for schema-based isolation. The shared user remains consistent across sandbox operations while isolation is achieved through dedicated PostgreSQL schemas.
 
-```yaml
-spring:
-  jpa:
-    hibernate:
-      ddl-auto: update
-```
+## Key Features
 
-**Main application class** — add `@EnableScheduling`:
+### Validation
+Before provisioning a sandbox, the service validates that both the exam and the student exist in the system. This prevents invalid or orphaned sandbox creation and keeps the workflow aligned with the monolith’s existing records.
 
-```java
-@SpringBootApplication
-@EnableScheduling
-public class QueryMeBackendApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(QueryMeBackendApplication.class, args);
-    }
+### Isolation
+Each sandbox is isolated through a unique schema derived from the exam and student identifiers. This keeps student execution separated from the rest of the application data while still operating in the shared database environment.
+
+### 63-Character Safety
+PostgreSQL identifiers are limited to 63 characters. The sandbox module applies schema naming rules that keep generated identifiers safe, normalized, and compatible with PostgreSQL limits.
+
+## API Documentation
+
+Base path: `http://localhost:8080/api/sandboxes`
+
+### Endpoint Summary
+
+| Endpoint | Method | Purpose | Input | Success Response |
+|---|---|---|---|---|
+| `/provision` | POST | Provision or reuse a sandbox schema for an exam/student pair | JSON body with `examId`, `studentId`, optional `seedSql` | `201 Created` with `schemaName`, `dbUsername` |
+| `/{examId}/students/{studentId}` | GET | Retrieve active sandbox connection details | `examId` and `studentId` as path variables | `200 OK` with `schemaName`, `dbUsername` |
+| `/{examId}/students/{studentId}` | DELETE | Tear down sandbox schema and update registry status | `examId` and `studentId` as path variables | `200 OK` with success `message` |
+
+### How These Endpoints Work
+
+| Step | Endpoint | What Happens Internally |
+|---|---|---|
+| 1 | `POST /provision` | Validates exam and student records, generates schema name, creates schema if missing, optionally executes `seedSql`, stores registry metadata, returns sandbox connection info. |
+| 2 | `GET /{examId}/students/{studentId}` | Looks up sandbox registry by exam and student, confirms sandbox status is active, then returns schema and database username. |
+| 3 | `DELETE /{examId}/students/{studentId}` | Finds the sandbox registry record, drops the schema, updates status, and returns a confirmation message. |
+
+### JSON Sample Data
+
+#### 1) Provision Sandbox
+
+Request (`POST /api/sandboxes/provision`):
+
+```json
+{
+  "examId": "7f8c2f5f-1ad2-4a8f-a4e2-81f6cb2e4d11",
+  "studentId": "2c39c7f9-85f8-4b2a-90c8-d4f4b5d99f73",
+  "seedSql": "CREATE TABLE IF NOT EXISTS answers (id UUID PRIMARY KEY, answer_text VARCHAR(255)); INSERT INTO answers (id, answer_text) VALUES ('9d4f8a89-7c7f-4a98-9cc5-ae9e1d6c5f10', 'Sample answer');"
 }
 ```
 
-**PostgreSQL user** — the `DB_USER` must have `CREATEROLE` privileges:
+Response (`201 Created`):
 
-```sql
-ALTER USER your_db_user CREATEROLE;
+```json
+{
+  "schemaName": "exam_7f8c2f5f1ad24a8fa4e281f6cb2e4d11_student_2c39c7f985f84b2a90c8d4f4b5d99f73",
+  "dbUsername": "level6year2"
+}
 ```
 
-## Integration Guide for Group G (Query Engine)
+#### 2) Get Sandbox Connection Details
 
-Autowire `SandboxService` into your service class:
+Request (`GET /api/sandboxes/7f8c2f5f-1ad2-4a8f-a4e2-81f6cb2e4d11/students/2c39c7f9-85f8-4b2a-90c8-d4f4b5d99f73`)
 
-```java
-package com.year2.queryme.queryengine;
+Response (`200 OK`):
 
-import com.year2.queryme.sandbox.dto.SandboxConnectionInfo;
-import com.year2.queryme.sandbox.service.SandboxService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import java.util.UUID;
+```json
+{
+  "schemaName": "exam_7f8c2f5f1ad24a8fa4e281f6cb2e4d11_student_2c39c7f985f84b2a90c8d4f4b5d99f73",
+  "dbUsername": "level6year2"
+}
+```
 
-@Service
-public class QueryEngineService {
+#### 3) Tear Down Sandbox
 
-    @Autowired
-    private SandboxService sandboxService;
+Request (`DELETE /api/sandboxes/7f8c2f5f-1ad2-4a8f-a4e2-81f6cb2e4d11/students/2c39c7f9-85f8-4b2a-90c8-d4f4b5d99f73`)
 
     public void executeStudentQuery(UUID examId, UUID studentId,
                                     String seedSql, String studentQuery) {
@@ -640,5 +668,33 @@ public class QueryEngineService {
 > Handle exceptions for all three calls — provisioning can fail if the DB user lacks `CREATEROLE`.
 
 ---
+Response (`200 OK`):
+
+```json
+{
+  "message": "Sandbox successfully dropped for examId=7f8c2f5f-1ad2-4a8f-a4e2-81f6cb2e4d11 and studentId=2c39c7f9-85f8-4b2a-90c8-d4f4b5d99f73"
+}
+```
+
+### Error Samples
+
+Validation failure example (`400/500` depending on global exception mapping):
+
+```json
+{
+  "message": "Exam not found in registry"
+}
+```
+
+Authorization failure example:
+
+```json
+{
+  "path": "/api/sandboxes/provision",
+  "error": "Unauthorized",
+  "message": "Full authentication is required to access this resource",
+  "status": 401
+}
+```
 
 *For questions about the Auth module contact `groupj.queryme@gmail.com`*

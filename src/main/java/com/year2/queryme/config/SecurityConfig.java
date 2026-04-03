@@ -60,6 +60,7 @@ public class SecurityConfig {
                         auth.requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/test/**").permitAll()
                                 .requestMatchers("/error").permitAll()
+                                .requestMatchers("/api/sandboxes/**").permitAll()
                                 .anyRequest().authenticated()
                 );
 
